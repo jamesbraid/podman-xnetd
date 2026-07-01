@@ -44,10 +44,11 @@ func run(args []string, stdout io.Writer) int {
 }
 
 type server struct {
-	att     *attach.Attacher
-	locks   *cidLocks
-	mu      sync.RWMutex
-	allowed map[int]struct{}
+	att      *attach.Attacher
+	locks    *cidLocks
+	stateDir string
+	mu       sync.RWMutex
+	allowed  map[int]struct{}
 }
 
 func (s *server) setAllowed(m map[int]struct{}) { s.mu.Lock(); s.allowed = m; s.mu.Unlock() }
@@ -103,7 +104,7 @@ func serve(cfgPath string) int {
 			return 1
 		}
 	}
-	srv := &server{att: att, locks: newCidLocks()}
+	srv := &server{att: att, locks: newCidLocks(), stateDir: cfg.Runtime.StateDir}
 	srv.setAllowed(uids)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -194,6 +195,12 @@ func (s *server) doAttach(req proto.Request, fd int) proto.Response {
 		_ = s.att.UnpinNetns(req.ContainerID)
 		return proto.Response{OK: false, Error: "attach: " + err.Error()}
 	}
+	if err := reconcile.WriteAttachCfg(s.stateDir, req.ContainerID, reconcile.AttachCfg{
+		Networks:  req.Networks,
+		StaticIPs: req.StaticIPs,
+	}); err != nil {
+		log.Printf("xnetd: persist cfg %s: %v", req.ContainerID, err)
+	}
 	if err := attach.WriteResolvConf(req, status); err != nil {
 		log.Printf("xnetd: resolv.conf %s: %v", req.ContainerID, err)
 	}
@@ -208,6 +215,7 @@ func (s *server) doDetach(req proto.Request) proto.Response {
 	if err := s.att.UnpinNetns(req.ContainerID); err != nil {
 		return proto.Response{OK: false, Error: "unpin: " + err.Error()}
 	}
+	reconcile.RemoveAttachCfg(s.stateDir, req.ContainerID)
 	return proto.Response{OK: true}
 }
 

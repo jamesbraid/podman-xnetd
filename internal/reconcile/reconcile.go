@@ -5,8 +5,10 @@
 package reconcile
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -14,6 +16,56 @@ import (
 	"github.com/jamesbraid/xnetd/internal/attach"
 	"github.com/jamesbraid/xnetd/internal/proto"
 )
+
+// AttachCfg is the per-container state persisted at attach time so reconcile
+// can supply the correct network names to libnetwork Teardown and release the
+// IPAM lease for containers that died while the daemon was down.
+type AttachCfg struct {
+	Networks  []string            `json:"networks"`
+	StaticIPs map[string][]string `json:"static_ips,omitempty"`
+}
+
+func cfgPath(stateDir, cid string) string {
+	return filepath.Join(stateDir, "cfg", cid+".json")
+}
+
+// WriteAttachCfg persists the network config for cid to disk.
+func WriteAttachCfg(stateDir, cid string, cfg AttachCfg) error {
+	dir := filepath.Join(stateDir, "cfg")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("reconcile: mkdir cfg: %w", err)
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("reconcile: marshal cfg: %w", err)
+	}
+	if err := os.WriteFile(cfgPath(stateDir, cid), data, 0o600); err != nil {
+		return fmt.Errorf("reconcile: write cfg: %w", err)
+	}
+	return nil
+}
+
+// RemoveAttachCfg removes the persisted config for cid; ignores missing files.
+func RemoveAttachCfg(stateDir, cid string) {
+	_ = os.Remove(cfgPath(stateDir, cid))
+}
+
+// readAttachCfg reads the persisted config for cid. Returns (cfg, true) on
+// success, ({}, false) if the file is missing, and an error on other failures.
+func readAttachCfg(stateDir, cid string) (AttachCfg, bool, error) {
+	data, err := os.ReadFile(cfgPath(stateDir, cid))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return AttachCfg{}, false, nil
+		}
+		return AttachCfg{}, false, err
+	}
+	var cfg AttachCfg
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return AttachCfg{}, false, err
+	}
+	return cfg, true, nil
+}
 
 // netnsIsDead reports whether the pin at path is no longer a live bind mount:
 // a live pin crosses a filesystem boundary (different st_dev than its parent);
@@ -54,6 +106,9 @@ func deadNetns(stateDir string) ([]string, error) {
 }
 
 // Reconcile detaches + unpins every container whose netns pin is dead.
+// It reads the persisted AttachCfg for each dead container so that
+// libnetwork Teardown can release the IPAM lease; if the file is missing it
+// logs and still unpins (best-effort).
 func Reconcile(a *attach.Attacher, stateDir string) error {
 	dead, err := deadNetns(stateDir)
 	if err != nil {
@@ -61,12 +116,22 @@ func Reconcile(a *attach.Attacher, stateDir string) error {
 	}
 	var errs []error
 	for _, cid := range dead {
-		if derr := a.Detach(proto.Request{Action: "detach", ContainerID: cid}); derr != nil {
+		req := proto.Request{Action: "detach", ContainerID: cid}
+		if cfg, ok, rerr := readAttachCfg(stateDir, cid); rerr != nil {
+			log.Printf("reconcile: read cfg %s: %v (detaching without networks)", cid, rerr)
+		} else if ok {
+			req.Networks = cfg.Networks
+			req.StaticIPs = cfg.StaticIPs
+		} else {
+			log.Printf("reconcile: no cfg for %s; detaching without networks (IPAM may leak)", cid)
+		}
+		if derr := a.Detach(req); derr != nil {
 			errs = append(errs, fmt.Errorf("detach %s: %w", cid, derr))
 		}
 		if uerr := a.UnpinNetns(cid); uerr != nil {
 			errs = append(errs, fmt.Errorf("unpin %s: %w", cid, uerr))
 		}
+		RemoveAttachCfg(stateDir, cid)
 	}
 	return errors.Join(errs...)
 }

@@ -5,6 +5,7 @@ go 1.25.6
 require (
 	github.com/pelletier/go-toml/v2 v2.4.2
 	go.podman.io/common v0.67.1
+	golang.org/x/net v0.45.0
 	golang.org/x/sys v0.46.0
 )
 

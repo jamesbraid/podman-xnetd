@@ -1,0 +1,7 @@
+[Unit]
+Description=xnetd rootful-networking daemon socket
+[Socket]
+ListenStream=/run/xnetd/sock
+SocketMode=0666
+[Install]
+WantedBy=sockets.target

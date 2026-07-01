@@ -116,6 +116,7 @@ func serve(cfgPath string) int {
 			case syscall.SIGHUP:
 				srv.reload(cfgPath)
 			case syscall.SIGTERM, syscall.SIGINT:
+				signal.Stop(sigCh)
 				cancel()
 				_ = ln.Close()
 				return
@@ -157,12 +158,12 @@ func (s *server) handleConn(conn *net.UnixConn) {
 		return
 	}
 	req, fd, err := proto.ReadRequest(conn)
+	if fd >= 0 {
+		defer unix.Close(fd)
+	}
 	if err != nil {
 		log.Printf("xnetd: read request: %v", err)
 		return
-	}
-	if fd >= 0 {
-		defer unix.Close(fd)
 	}
 	if err := proto.WriteResponse(conn, s.handleRequest(req, fd)); err != nil {
 		log.Printf("xnetd: write response: %v", err)

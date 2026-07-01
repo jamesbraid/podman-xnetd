@@ -135,8 +135,12 @@ func sendNA(iface string, body []byte) error {
 	}
 	defer c.Close()
 	p := c.IPv6PacketConn()
-	_ = p.SetHopLimit(255)
-	_ = p.SetMulticastHopLimit(255)
+	if err := p.SetHopLimit(255); err != nil {
+		return fmt.Errorf("neighbor: set hop limit: %w", err)
+	}
+	if err := p.SetMulticastHopLimit(255); err != nil {
+		return fmt.Errorf("neighbor: set multicast hop limit: %w", err)
+	}
 	dst := &net.IPAddr{IP: net.ParseIP("ff02::1"), Zone: iface}
 	cm := &ipv6.ControlMessage{IfIndex: ifi.Index, HopLimit: 255}
 	for i := 0; i < 2; i++ {

@@ -30,3 +30,18 @@ func TestNewNilConfig(t *testing.T) {
 		t.Fatal("New(nil) should error")
 	}
 }
+
+func TestNetnsPath(t *testing.T) {
+	a, _ := New(testCfg())
+	if got := a.netnsPath("abc123"); got != "/run/xnetd/netns/abc123" {
+		t.Fatalf("netnsPath = %q", got)
+	}
+}
+
+func TestIfaceName(t *testing.T) {
+	for i, want := range map[int]string{0: "eth0", 1: "eth1", 7: "eth7"} {
+		if ifaceName(i) != want {
+			t.Fatalf("ifaceName(%d) != %q", i, want)
+		}
+	}
+}

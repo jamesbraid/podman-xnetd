@@ -5,6 +5,8 @@ package attach
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
 
 	"go.podman.io/common/libnetwork/netavark"
 	"go.podman.io/common/libnetwork/types"
@@ -42,3 +44,9 @@ func New(cfg *config.Config) (*Attacher, error) {
 	}
 	return &Attacher{iface: iface, cfg: cfg}, nil
 }
+
+func (a *Attacher) netnsPath(cid string) string {
+	return filepath.Join(a.cfg.Runtime.StateDir, "netns", cid)
+}
+
+func ifaceName(i int) string { return fmt.Sprintf("eth%d", i) }

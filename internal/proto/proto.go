@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 James Braid
 
 // Package proto is the xnetd wire protocol: 4-byte big-endian length prefix
 // + JSON body; attach passes one netns fd via SCM_RIGHTS.

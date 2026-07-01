@@ -2,9 +2,11 @@
 package attach
 
 import (
+	"net"
 	"testing"
 
 	"github.com/jamesbraid/xnetd/internal/config"
+	"github.com/jamesbraid/xnetd/internal/proto"
 )
 
 func testCfg() *config.Config {
@@ -43,5 +45,35 @@ func TestIfaceName(t *testing.T) {
 		if ifaceName(i) != want {
 			t.Fatalf("ifaceName(%d) != %q", i, want)
 		}
+	}
+}
+
+func TestParseStaticIPs(t *testing.T) {
+	got, err := parseStaticIPs([]string{"10.0.0.5", "fd00::5"})
+	if err != nil || len(got) != 2 || !got[0].Equal(net.ParseIP("10.0.0.5")) || !got[1].Equal(net.ParseIP("fd00::5")) {
+		t.Fatalf("got %v err %v", got, err)
+	}
+	if _, err := parseStaticIPs([]string{"nope"}); err == nil {
+		t.Fatal("bad ip should error")
+	}
+	if got, _ := parseStaticIPs(nil); len(got) != 0 {
+		t.Fatal("nil should be empty")
+	}
+}
+
+func TestBuildNetworkOptions(t *testing.T) {
+	a := &Attacher{}
+	opts, err := a.buildNetworkOptions(proto.Request{
+		ContainerID: "cid", ContainerName: "cname",
+		Networks:  []string{"net1", "net2"},
+		StaticIPs: map[string][]string{"net2": {"10.0.1.9"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.ContainerID != "cid" || opts.Networks["net1"].InterfaceName != "eth0" ||
+		opts.Networks["net2"].InterfaceName != "eth1" || len(opts.Networks["net1"].StaticIPs) != 0 ||
+		len(opts.Networks["net2"].StaticIPs) != 1 {
+		t.Fatalf("opts = %+v", opts)
 	}
 }

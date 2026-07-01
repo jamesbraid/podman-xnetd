@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+
+	"golang.org/x/sys/unix"
 )
 
 type Request struct {
@@ -41,27 +43,52 @@ func WriteRequest(c *net.UnixConn, r Request, fd int) error {
 	if err != nil {
 		return err
 	}
+	buf := frame(body)
+	var oob []byte
 	if fd >= 0 {
-		return fmt.Errorf("proto: fd passing not implemented")
+		oob = unix.UnixRights(fd)
 	}
-	_, err = c.Write(frame(body))
-	return err
+	n, oobn, err := c.WriteMsgUnix(buf, oob, nil)
+	if err != nil {
+		return err
+	}
+	if n != len(buf) || oobn != len(oob) {
+		return fmt.Errorf("proto: short write %d/%d, oob %d/%d", n, len(buf), oobn, len(oob))
+	}
+	return nil
 }
 
 func ReadRequest(c *net.UnixConn) (Request, int, error) {
 	var hdr [4]byte
-	if _, err := io.ReadFull(c, hdr[:]); err != nil {
+	oob := make([]byte, unix.CmsgSpace(4))
+	n, oobn, _, _, err := c.ReadMsgUnix(hdr[:], oob)
+	if err != nil {
 		return Request{}, -1, err
+	}
+	if n != len(hdr) {
+		return Request{}, -1, fmt.Errorf("proto: short header %d/%d", n, len(hdr))
+	}
+	fd := -1
+	if oobn > 0 {
+		scms, perr := unix.ParseSocketControlMessage(oob[:oobn])
+		if perr != nil {
+			return Request{}, -1, perr
+		}
+		for _, scm := range scms {
+			if fds, ferr := unix.ParseUnixRights(&scm); ferr == nil && len(fds) > 0 {
+				fd = fds[0]
+			}
+		}
 	}
 	body := make([]byte, binary.BigEndian.Uint32(hdr[:]))
 	if _, err := io.ReadFull(c, body); err != nil {
-		return Request{}, -1, err
+		return Request{}, fd, err
 	}
 	var r Request
 	if err := json.Unmarshal(body, &r); err != nil {
-		return Request{}, -1, err
+		return Request{}, fd, err
 	}
-	return r, -1, nil
+	return r, fd, nil
 }
 
 func WriteResponse(c *net.UnixConn, r Response) error {

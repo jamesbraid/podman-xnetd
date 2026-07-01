@@ -9,6 +9,12 @@ import (
 	"net"
 )
 
+const (
+	icmpTypeNA      = 136
+	naFlagOverride  = 0x20 // R0 S0 O1
+	optTargetLLAddr = 2
+)
+
 func buildGratuitousARP(ip net.IP, mac net.HardwareAddr) []byte {
 	v4 := ip.To4()
 	p := make([]byte, 28)
@@ -22,4 +28,15 @@ func buildGratuitousARP(ip net.IP, mac net.HardwareAddr) []byte {
 	copy(p[18:24], []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
 	copy(p[24:28], v4)
 	return p
+}
+
+func buildUnsolicitedNA(ip net.IP, mac net.HardwareAddr) []byte {
+	b := make([]byte, 32)
+	b[0] = icmpTypeNA
+	b[4] = naFlagOverride
+	copy(b[8:24], ip.To16())
+	b[24] = optTargetLLAddr
+	b[25] = 1
+	copy(b[26:32], mac)
+	return b
 }

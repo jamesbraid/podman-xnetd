@@ -1,0 +1,6 @@
+{
+  "version": "1.0.0",
+  "hook": { "path": "/usr/local/lib/xnet/oci-hook", "args": ["oci-hook", "poststop"], "env": ["XNET_HOOK_STAGE=poststop"] },
+  "when": { "annotations": { "org.octanix.rootful_networks": ".+" } },
+  "stages": ["poststop"]
+}

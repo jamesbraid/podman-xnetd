@@ -209,6 +209,17 @@ func (s *server) doAttach(req proto.Request, fd int) proto.Response {
 }
 
 func (s *server) doDetach(req proto.Request) proto.Response {
+	// If the hook didn't supply network info (poststop only sends container_id),
+	// load the saved attach config so netavark can tear down correctly and the
+	// IPAM lease is freed.
+	if len(req.Networks) == 0 {
+		if cfg, ok, err := reconcile.ReadAttachCfg(s.stateDir, req.ContainerID); err != nil {
+			log.Printf("xnetd: read cfg %s: %v (detaching without networks)", req.ContainerID, err)
+		} else if ok {
+			req.Networks = cfg.Networks
+			req.StaticIPs = cfg.StaticIPs
+		}
+	}
 	if err := s.att.Detach(req); err != nil {
 		return proto.Response{OK: false, Error: "detach: " + err.Error()}
 	}

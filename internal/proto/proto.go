@@ -80,7 +80,11 @@ func ReadRequest(c *net.UnixConn) (Request, int, error) {
 			}
 		}
 	}
-	body := make([]byte, binary.BigEndian.Uint32(hdr[:]))
+	bodyLen := binary.BigEndian.Uint32(hdr[:])
+	if bodyLen > 1<<20 {
+		return Request{}, fd, fmt.Errorf("proto: request body too large (%d bytes)", bodyLen)
+	}
+	body := make([]byte, bodyLen)
 	if _, err := io.ReadFull(c, body); err != nil {
 		return Request{}, fd, err
 	}

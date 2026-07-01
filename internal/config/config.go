@@ -61,9 +61,19 @@ func Load(path string) (*Config, error) {
 	return &c, nil
 }
 
-// ResolveAllowedUIDs resolves usernames to a uid set (implemented in Task 5).
+// ResolveAllowedUIDs resolves AllowedUsers to a uid set once at startup.
 func (c *Config) ResolveAllowedUIDs() (map[int]struct{}, error) {
-	_ = strconv.Itoa
-	_ = user.Lookup
-	return nil, fmt.Errorf("config: ResolveAllowedUIDs not implemented")
+	out := make(map[int]struct{}, len(c.AllowedUsers))
+	for _, name := range c.AllowedUsers {
+		u, err := user.Lookup(name)
+		if err != nil {
+			return nil, fmt.Errorf("resolve allowed user %q: %w", name, err)
+		}
+		uid, err := strconv.Atoi(u.Uid)
+		if err != nil {
+			return nil, fmt.Errorf("parse uid for %q: %w", name, err)
+		}
+		out[uid] = struct{}{}
+	}
+	return out, nil
 }

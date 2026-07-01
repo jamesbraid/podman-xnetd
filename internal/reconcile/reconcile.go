@@ -50,9 +50,9 @@ func RemoveAttachCfg(stateDir, cid string) {
 	_ = os.Remove(cfgPath(stateDir, cid))
 }
 
-// readAttachCfg reads the persisted config for cid. Returns (cfg, true) on
+// ReadAttachCfg reads the persisted config for cid. Returns (cfg, true) on
 // success, ({}, false) if the file is missing, and an error on other failures.
-func readAttachCfg(stateDir, cid string) (AttachCfg, bool, error) {
+func ReadAttachCfg(stateDir, cid string) (AttachCfg, bool, error) {
 	data, err := os.ReadFile(cfgPath(stateDir, cid))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -117,7 +117,7 @@ func Reconcile(a *attach.Attacher, stateDir string) error {
 	var errs []error
 	for _, cid := range dead {
 		req := proto.Request{Action: "detach", ContainerID: cid}
-		if cfg, ok, rerr := readAttachCfg(stateDir, cid); rerr != nil {
+		if cfg, ok, rerr := ReadAttachCfg(stateDir, cid); rerr != nil {
 			log.Printf("reconcile: read cfg %s: %v (detaching without networks)", cid, rerr)
 		} else if ok {
 			req.Networks = cfg.Networks

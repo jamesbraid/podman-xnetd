@@ -51,7 +51,7 @@ func WriteResolvConf(req proto.Request, status map[string]types.StatusBlock) err
 	cmd := exec.Command("nsenter",
 		fmt.Sprintf("--user=/proc/%d/ns/user", req.Pid),
 		fmt.Sprintf("--mount=/proc/%d/ns/mnt", req.Pid),
-		"sh", "-c", fmt.Sprintf("cat > %s", target))
+		"sh", "-c", `cat > "$1"`, "xnetd", target)
 	cmd.Stdin = bytes.NewReader(renderResolvConf(status))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("attach: write resolv.conf: %w: %s", err, out)

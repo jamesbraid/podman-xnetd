@@ -3,6 +3,7 @@ module github.com/jamesbraid/xnetd
 go 1.25.6
 
 require (
+	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/pelletier/go-toml/v2 v2.4.2
 	go.podman.io/common v0.67.1
 	golang.org/x/net v0.45.0
@@ -13,7 +14,6 @@ require (
 	cyphar.com/go-pathrs v0.2.4 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/containernetworking/plugins v1.8.0 // indirect
-	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect

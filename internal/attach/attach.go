@@ -79,3 +79,35 @@ func (a *Attacher) buildNetworkOptions(req proto.Request) (types.NetworkOptions,
 	}
 	return types.NetworkOptions{ContainerID: req.ContainerID, ContainerName: req.ContainerName, Networks: nets}, nil
 }
+
+func validate(req proto.Request) error {
+	if req.ContainerID == "" {
+		return errors.New("attach: empty ContainerID")
+	}
+	return nil
+}
+
+func (a *Attacher) Attach(req proto.Request) (map[string]types.StatusBlock, error) {
+	if err := validate(req); err != nil {
+		return nil, err
+	}
+	if len(req.Networks) == 0 {
+		return nil, errors.New("attach: no networks requested")
+	}
+	opts, err := a.buildNetworkOptions(req)
+	if err != nil {
+		return nil, err
+	}
+	return a.iface.Setup(a.netnsPath(req.ContainerID), types.SetupOptions{NetworkOptions: opts})
+}
+
+func (a *Attacher) Detach(req proto.Request) error {
+	if err := validate(req); err != nil {
+		return err
+	}
+	opts, err := a.buildNetworkOptions(req)
+	if err != nil {
+		return err
+	}
+	return a.iface.Teardown(a.netnsPath(req.ContainerID), types.TeardownOptions{NetworkOptions: opts})
+}

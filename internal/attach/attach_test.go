@@ -77,3 +77,28 @@ func TestBuildNetworkOptions(t *testing.T) {
 		t.Fatalf("opts = %+v", opts)
 	}
 }
+
+func TestAttachRejectsEmptyContainerID(t *testing.T) {
+	if _, err := (&Attacher{}).Attach(proto.Request{Networks: []string{"n"}}); err == nil {
+		t.Fatal("want error")
+	}
+}
+
+func TestAttachRejectsNoNetworks(t *testing.T) {
+	if _, err := (&Attacher{}).Attach(proto.Request{ContainerID: "cid"}); err == nil {
+		t.Fatal("want error")
+	}
+}
+
+func TestDetachRejectsEmptyContainerID(t *testing.T) {
+	if err := (&Attacher{}).Detach(proto.Request{Networks: []string{"n"}}); err == nil {
+		t.Fatal("want error")
+	}
+}
+
+func TestAttachBadStaticIPBeforeSetup(t *testing.T) {
+	_, err := (&Attacher{}).Attach(proto.Request{ContainerID: "cid", Networks: []string{"n"}, StaticIPs: map[string][]string{"n": {"garbage"}}})
+	if err == nil {
+		t.Fatal("bad static IP must error before Setup")
+	}
+}

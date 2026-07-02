@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/jamesbraid/xnetd/internal/attach"
-	"github.com/jamesbraid/xnetd/internal/proto"
+	"github.com/jamesbraid/podman-xnetd/internal/attach"
+	"github.com/jamesbraid/podman-xnetd/internal/proto"
 )
 
 // AttachCfg is the per-container state persisted at attach time so reconcile

@@ -10,7 +10,7 @@ import (
 
 	"go.podman.io/common/libnetwork/types"
 
-	"github.com/jamesbraid/xnetd/internal/proto"
+	"github.com/jamesbraid/podman-xnetd/internal/proto"
 )
 
 const resolvSearchDomain = "dns.podman"

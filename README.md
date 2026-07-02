@@ -35,7 +35,7 @@ Containers specify which networks to attach via podman annotations:
 
 ### 1. Get the Binaries
 
-Download from [releases](https://github.com/jamesbraid/xnetd/releases):
+Download from [releases](https://github.com/jamesbraid/podman-xnetd/releases):
 
 ```bash
 # Unpack the release tarball
@@ -133,8 +133,8 @@ journalctl -u xnetd -f
 Clone the repo and build:
 
 ```bash
-git clone https://github.com/jamesbraid/xnetd.git
-cd xnetd
+git clone https://github.com/jamesbraid/podman-xnetd.git
+cd podman-xnetd
 go build -o xnetd ./cmd/xnetd
 go build -o oci-hook ./cmd/oci-hook
 ```

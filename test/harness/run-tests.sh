@@ -15,8 +15,8 @@ log "systemd: $(systemctl is-system-running 2>/dev/null)"
 # Install binaries and deploy artifacts.
 install -m 0755 /out/xnetd              /usr/local/bin/xnetd
 install -m 0755 /out/oci-hook           /usr/local/lib/xnet/oci-hook
-install -m 0644 /out/dist/oci-hook.json /out/dist/oci-hook-poststop.json /etc/containers/oci/hooks.d/
-install -m 0644 /out/dist/xnetd.service /out/dist/xnetd.socket /etc/systemd/system/
+install -m 0644 /out/deploy/oci-hook.json /out/deploy/oci-hook-poststop.json /etc/containers/oci/hooks.d/
+install -m 0644 /out/deploy/xnetd.service /out/deploy/xnetd.socket /etc/systemd/system/
 
 # Write config.toml.
 cat > /etc/xnetd/config.toml <<'TOML'

@@ -1,0 +1,30 @@
+version: 2
+project_name: xnetd
+before:
+  hooks: [go mod tidy]
+builds:
+  - id: xnetd
+    main: ./cmd/xnetd
+    binary: xnetd
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+  - id: oci-hook
+    main: ./cmd/oci-hook
+    binary: oci-hook
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{ .Version }}"]
+archives:
+  - id: default
+    ids: [xnetd, oci-hook]
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+checksum: { name_template: checksums.txt, algorithm: sha256 }
+snapshot: { version_template: "{{ incpatch .Version }}-next" }
+release:
+  github: { owner: jamesbraid, name: xnetd }

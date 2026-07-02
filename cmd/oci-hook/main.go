@@ -7,7 +7,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/jamesbraid/xnetd/internal/proto"
+	"github.com/jamesbraid/podman-xnetd/internal/proto"
 	"golang.org/x/sys/unix"
 )
 

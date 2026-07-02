@@ -5,8 +5,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/jamesbraid/xnetd/internal/config"
-	"github.com/jamesbraid/xnetd/internal/proto"
+	"github.com/jamesbraid/podman-xnetd/internal/config"
+	"github.com/jamesbraid/podman-xnetd/internal/proto"
 )
 
 func testCfg() *config.Config {

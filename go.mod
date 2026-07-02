@@ -1,4 +1,4 @@
-module github.com/jamesbraid/xnetd
+module github.com/jamesbraid/podman-xnetd
 
 go 1.25.6
 

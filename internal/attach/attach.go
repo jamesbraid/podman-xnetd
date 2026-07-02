@@ -13,8 +13,8 @@ import (
 	"go.podman.io/common/libnetwork/types"
 	pconfig "go.podman.io/common/pkg/config"
 
-	"github.com/jamesbraid/xnetd/internal/config"
-	"github.com/jamesbraid/xnetd/internal/proto"
+	"github.com/jamesbraid/podman-xnetd/internal/config"
+	"github.com/jamesbraid/podman-xnetd/internal/proto"
 )
 
 // Attacher wires container network namespaces to rootful networks via the

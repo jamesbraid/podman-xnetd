@@ -27,4 +27,4 @@ archives:
 checksum: { name_template: checksums.txt, algorithm: sha256 }
 snapshot: { version_template: "{{ incpatch .Version }}-next" }
 release:
-  github: { owner: jamesbraid, name: xnetd }
+  github: { owner: jamesbraid, name: podman-xnetd }

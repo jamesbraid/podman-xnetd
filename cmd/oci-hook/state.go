@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jamesbraid/xnetd/internal/proto"
+	"github.com/jamesbraid/podman-xnetd/internal/proto"
 )
 
 type ociState struct {

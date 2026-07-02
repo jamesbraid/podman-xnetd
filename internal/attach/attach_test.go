@@ -3,6 +3,7 @@ package attach
 
 import (
 	"net"
+	"os"
 	"testing"
 
 	"github.com/jamesbraid/podman-xnetd/internal/config"
@@ -18,6 +19,12 @@ func testCfg() *config.Config {
 }
 
 func TestNew(t *testing.T) {
+	// New constructs libnetwork's netavark backend, which opens the netavark
+	// lock under /run/lock — that needs root. The full construction is
+	// exercised by the integration harness; skip when not privileged.
+	if os.Geteuid() != 0 {
+		t.Skip("New opens the netavark lock (needs root); covered by the integration harness")
+	}
 	a, err := New(testCfg())
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -34,7 +41,9 @@ func TestNewNilConfig(t *testing.T) {
 }
 
 func TestNetnsPath(t *testing.T) {
-	a, _ := New(testCfg())
+	// netnsPath only needs cfg; build the Attacher directly so this stays a
+	// pure unit test (no privileged libnetwork construction).
+	a := &Attacher{cfg: testCfg()}
 	if got := a.netnsPath("abc123"); got != "/run/xnetd/netns/abc123" {
 		t.Fatalf("netnsPath = %q", got)
 	}

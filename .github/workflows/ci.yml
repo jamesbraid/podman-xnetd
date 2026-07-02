@@ -1,0 +1,39 @@
+name: ci
+on: [push, pull_request]
+permissions: { contents: read }
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+      - run: go vet ./...
+      - run: go test ./... -race -count=1
+  harness:
+    needs: unit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+      - name: build static artifacts
+        run: |
+          mkdir -p out/dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o out/xnetd    ./cmd/xnetd
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o out/oci-hook ./cmd/oci-hook
+          cp dist/oci-hook.json dist/oci-hook-poststop.json dist/xnetd.service dist/xnetd.socket out/dist/
+      - name: build harness
+        run: docker build -f test/harness/Dockerfile -t xnetd-harness:local .
+      - name: boot + run
+        run: |
+          CID=$(docker run -d --privileged --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup -v "$PWD/out:/out:ro" xnetd-harness:local)
+          echo "CID=$CID" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do s=$(docker exec "$CID" systemctl is-system-running 2>/dev/null || true); { [ "$s" = running ] || [ "$s" = degraded ]; } && break; sleep 2; done
+          docker exec "$CID" /usr/local/bin/run-tests.sh
+      - name: logs on failure
+        if: failure()
+        run: docker exec "$CID" journalctl -u xnetd --no-pager || true
+      - name: cleanup
+        if: always()
+        run: docker rm -f "$CID" || true

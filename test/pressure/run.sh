@@ -3,10 +3,9 @@
 # Runs inside the xnetd-harness container as root.
 # Exit 0 iff no resource growth beyond tolerance and all cases behave.
 #
-# Constraints vs. original brief:
-#   - Podman 4.3.1 (Debian bookworm) lacks Quadlet; uses plain podman create/start.
-#   - Annotation comma-split bug prevents dual-stack static IPs; v4-only networks.
-#   - netavark 1.4.0 requires static IPs; each container needs a distinct annotation.
+# Platform: debian:sid-slim — podman 5.8.3, netavark 1.17.2
+# Network: dual-stack (v4 + v6) to exercise both gARP and NA code paths
+# under churn conditions.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,18 +18,32 @@ trap 'log "pressure FAILED at line $LINENO"' ERR
 
 RC=0
 
-# ── Setup: one IPv4-only network ───────────────────────────────────────────
+# ── Setup: dual-stack pressure network ────────────────────────────────────────
+# v6 subnet fd00:10:89:30::/64 exercises the unsolicited-NA path under churn.
 log "pressure: setup network"
 podman network rm -f press-net 2>/dev/null || true
-podman network create --subnet 10.89.30.0/24 press-net
+podman network create --subnet 10.89.30.0/24 --subnet fd00:10:89:30::/64 press-net
 
 log "pressure: pulling alpine image"
 as_media "podman pull docker.io/library/alpine:3.20 2>&1" | tail -3
 podman pull docker.io/library/alpine:3.20 2>&1 | tail -2
 
-# ── Helper: create+start a named container on press-net ───────────────────
-# Usage: start_press_ctr <name> <ip>
+# ── Helper: create+start a named container with dual-stack static IPs ─────────
+# Usage: start_press_ctr <name> <v4-ip> <v6-ip>
 start_press_ctr() {
+    local name="$1" ip="$2" ip6="$3"
+    as_media "podman rm -f $name 2>/dev/null; true"
+    as_media "podman create --name $name --network none \
+        --annotation 'org.octanix.rootful_networks=press-net' \
+        --annotation 'org.octanix.static_ip.press-net=$ip,$ip6' \
+        --annotation 'org.octanix.container_name=$name' \
+        docker.io/library/alpine:3.20 sleep infinity 2>&1" | grep -v warning || true
+    as_media "podman start $name 2>&1" | grep -v warning || true
+}
+
+# Concurrent-attach containers use v4-only static IPs (focus: concurrency + IPAM,
+# not dual-stack — that is covered by the integration suite).
+start_press_ctr_v4() {
     local name="$1" ip="$2"
     as_media "podman rm -f $name 2>/dev/null; true"
     as_media "podman create --name $name --network none \
@@ -41,8 +54,7 @@ start_press_ctr() {
     as_media "podman start $name 2>&1" | grep -v warning || true
 }
 
-# wait_for_eth0 in lib.sh uses plain podman exec (runs as root, works for any container)
-# Override here to run as media since the container is rootless:
+# wait_for_eth0 in lib.sh uses as_media so it works for rootless containers.
 wait_for_eth0_ctr() {
     local ctr="$1" timeout="${2:-30}" i=0
     while ! as_media "podman exec $ctr ip link show eth0 2>/dev/null" | grep -q eth0; do
@@ -52,10 +64,26 @@ wait_for_eth0_ctr() {
     done
 }
 
-# ── Test 1: restart-churn leak (25 cycles) ────────────────────────────────
-log "pressure: TEST 1 — restart-churn leak (25 cycles)"
-start_press_ctr churn 10.89.30.100
+wait_for_eth0_v6_ctr() {
+    local ctr="$1" timeout="${2:-30}" i=0
+    while true; do
+        OUT=$(as_media "podman exec $ctr ip -6 addr show eth0 2>/dev/null" || true)
+        if printf '%s' "$OUT" | grep "inet6" | grep -qv "fe80::"; then
+            break
+        fi
+        i=$(( i + 1 ))
+        [ $i -ge $timeout ] && { fail "wait-eth0-v6-$ctr" "eth0 global IPv6 never appeared in ${timeout}s"; return 1; }
+        sleep 1
+    done
+}
+
+# ── Test 1: restart-churn leak (25 cycles, dual-stack) ────────────────────────
+# Uses dual-stack static IPs so that BOTH the gARP and unsolicited-NA code paths
+# are exercised on every restart cycle.
+log "pressure: TEST 1 — restart-churn leak (25 cycles, dual-stack)"
+start_press_ctr churn 10.89.30.100 fd00:10:89:30::100
 wait_for_eth0_ctr churn
+wait_for_eth0_v6_ctr churn
 
 BASE_NETNS=$(count_netns)
 BASE_VETH=$(count_veth)
@@ -65,6 +93,7 @@ log "pressure: baseline netns=$BASE_NETNS veth=$BASE_VETH fd=$BASE_FD"
 for i in $(seq 1 25); do
     as_media "podman restart churn 2>&1" | grep -v warning || true
     wait_for_eth0_ctr churn 30
+    wait_for_eth0_v6_ctr churn 30
 done
 sleep 5
 
@@ -85,14 +114,13 @@ as_media "podman stop churn 2>/dev/null" || true
 as_media "podman rm -f churn 2>/dev/null" || true
 sleep 2
 
-# ── Test 2: concurrent attach (10 containers) ─────────────────────────────
+# ── Test 2: concurrent attach (10 containers, v4-only static IPs) ─────────────
 log "pressure: TEST 2 — concurrent attach (10 containers)"
 
-# Assign static IPs .10 through .19
 PIDS=()
 for i in $(seq 1 10); do
     IP="10.89.30.$((9 + i))"
-    (start_press_ctr "concurrent${i}" "$IP") &
+    (start_press_ctr_v4 "concurrent${i}" "$IP") &
     PIDS+=($!)
 done
 for pid in "${PIDS[@]}"; do wait "$pid" || true; done
@@ -123,20 +151,17 @@ XNETD_ERR=$(journalctl -u xnetd --no-pager -q 2>/dev/null | grep -ci 'panic' || 
     || { fail "concurrent-xnetd-panics" "xnetd logged $XNETD_ERR panic lines"; RC=1; }
 [ "$CONCURRENT_RC" -eq 0 ] && log "PASS: concurrent-attach"
 
-# Stop concurrent containers
 for i in $(seq 1 10); do
     as_media "podman stop concurrent${i} 2>/dev/null" || true
     as_media "podman rm -f concurrent${i} 2>/dev/null" || true
 done
 sleep 2
 
-# ── Test 3: kill-mid-attach ────────────────────────────────────────────────
+# ── Test 3: kill-mid-attach ────────────────────────────────────────────────────
 log "pressure: TEST 3 — kill-mid-attach"
 PRE_VETH=$(count_veth)
 
-# Start a container in the background; kill xnetd immediately after hook fires.
-# The race is intentional — we want to test that socket-activation respawns.
-(start_press_ctr "killtest" "10.89.30.200") &
+(start_press_ctr "killtest" "10.89.30.200" "fd00:10:89:30::200") &
 SPID=$!
 sleep 0.7
 XNETD_PID=$(pgrep -x xnetd 2>/dev/null || true)
@@ -153,9 +178,9 @@ sleep 3
 systemctl is-active xnetd.socket \
     || { fail "kill-socket-inactive" "xnetd.socket not active after kill"; RC=1; }
 
-# Fresh attach should work (daemon respawns on next connection)
-start_press_ctr "killtest2" "10.89.30.201"
+start_press_ctr "killtest2" "10.89.30.201" "fd00:10:89:30::201"
 wait_for_eth0_ctr "killtest2"
+wait_for_eth0_v6_ctr "killtest2"
 
 POST_VETH=$(count_veth)
 log "pressure: veth before=$PRE_VETH after kill+fresh-start=$POST_VETH"
@@ -167,7 +192,7 @@ as_media "podman stop killtest2 2>/dev/null" || true
 as_media "podman rm -f killtest2 2>/dev/null" || true
 sleep 2
 
-# ── Test 4: nonexistent network (clean failure, no leak) ──────────────────
+# ── Test 4: nonexistent network (clean failure, no leak) ──────────────────────
 log "pressure: TEST 4 — nonexistent network"
 PRE_VETH4=$(count_veth)
 PRE_NETNS4=$(count_netns)
@@ -178,9 +203,6 @@ as_media "podman create --name badnet --network none \
     --annotation 'org.octanix.container_name=badnet' \
     docker.io/library/alpine:3.20 sleep infinity 2>&1" | grep -v warning || true
 
-# Expected to fail: use || true so the ERR trap does not fire.
-# The container will fail to start (OCI hook returns non-zero) or
-# immediately exit.  The real assertion is the state check below.
 BADNET_OUT=$(as_media "podman start badnet 2>&1" || true)
 log "pressure: badnet start output: ${BADNET_OUT:-<empty>}"
 sleep 2
@@ -206,7 +228,7 @@ log "PASS: nonexistent-network"
 
 as_media "podman rm -f badnet 2>/dev/null" || true
 
-# ── Teardown ───────────────────────────────────────────────────────────────
+# ── Teardown ───────────────────────────────────────────────────────────────────
 log "pressure: teardown"
 podman network rm -f press-net 2>/dev/null || true
 

@@ -11,6 +11,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var version = "dev"
+
 func main() { os.Exit(run(os.Args, os.Stdin)) }
 
 func resolveStage(args []string) string {
@@ -28,6 +30,13 @@ func hookSocket() string {
 }
 
 func run(args []string, stdin io.Reader) int {
+	// Check for --version early
+	for _, arg := range args {
+		if arg == "--version" {
+			fmt.Println(version)
+			return 0
+		}
+	}
 	stage := resolveStage(args)
 	st, err := parseState(stdin)
 	if err != nil {

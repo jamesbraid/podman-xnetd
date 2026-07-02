@@ -49,7 +49,7 @@ func TestWriteAndReadAttachCfg(t *testing.T) {
 	if err := WriteAttachCfg(dir, "cid1", want); err != nil {
 		t.Fatalf("WriteAttachCfg: %v", err)
 	}
-	got, ok, err := readAttachCfg(dir, "cid1")
+	got, ok, err := ReadAttachCfg(dir, "cid1")
 	if err != nil || !ok {
 		t.Fatalf("readAttachCfg: ok=%v err=%v", ok, err)
 	}
@@ -63,7 +63,7 @@ func TestWriteAndReadAttachCfg(t *testing.T) {
 
 func TestReadAttachCfgMissing(t *testing.T) {
 	dir := t.TempDir()
-	_, ok, err := readAttachCfg(dir, "no-such-cid")
+	_, ok, err := ReadAttachCfg(dir, "no-such-cid")
 	if err != nil || ok {
 		t.Fatalf("expected missing: ok=%v err=%v", ok, err)
 	}
@@ -73,7 +73,7 @@ func TestReadAttachCfgCorrupt(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "cfg"), 0o700)
 	os.WriteFile(filepath.Join(dir, "cfg", "bad.json"), []byte("not json"), 0o600)
-	_, ok, err := readAttachCfg(dir, "bad")
+	_, ok, err := ReadAttachCfg(dir, "bad")
 	if err == nil || ok {
 		t.Fatalf("expected error for corrupt file: ok=%v err=%v", ok, err)
 	}

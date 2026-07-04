@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/coreos/go-systemd/v22/journal"
 	"github.com/jamesbraid/podman-xnetd/internal/proto"
 	"golang.org/x/sys/unix"
 )
@@ -14,6 +15,17 @@ import (
 var version = "dev"
 
 func main() { os.Exit(run(os.Args, os.Stdin)) }
+
+// logErr reports a hook failure to stderr AND the journal. A createRuntime hook
+// that exits non-zero aborts the container start, but crun discards the hook's
+// stderr — the journal (journalctl -t xnet-oci-hook) is the only place an
+// operator can see why. Journal send is best-effort: if journald is unreachable
+// the stderr line still stands.
+func logErr(format string, a ...any) {
+	msg := "oci-hook: " + fmt.Sprintf(format, a...)
+	fmt.Fprintln(os.Stderr, msg)
+	_ = journal.Send(msg, journal.PriErr, map[string]string{"SYSLOG_IDENTIFIER": "xnet-oci-hook"})
+}
 
 func resolveStage(args []string) string {
 	if len(args) > 1 && args[1] != "" {
@@ -40,7 +52,7 @@ func run(args []string, stdin io.Reader) int {
 	stage := resolveStage(args)
 	st, err := parseState(stdin)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "oci-hook: parse state: %v\n", err)
+		logErr("parse state: %v", err)
 		return 1
 	}
 	socket := hookSocket()
@@ -51,35 +63,35 @@ func run(args []string, stdin io.Reader) int {
 		doPoststop(st, socket)
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "oci-hook: unknown stage %q\n", stage)
+		logErr("unknown stage %q", stage)
 		return 1
 	}
 }
 
 func doCreateRuntime(st ociState, socket string) int {
 	if st.Pid <= 0 {
-		fmt.Fprintln(os.Stderr, "oci-hook: createRuntime needs pid>0")
+		logErr("cid=%s createRuntime needs pid>0", st.ID)
 		return 1
 	}
 	nsPath := fmt.Sprintf("/proc/%d/ns/net", st.Pid)
 	fd, err := unix.Open(nsPath, unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "oci-hook: open %s: %v\n", nsPath, err)
+		logErr("cid=%s open %s: %v", st.ID, nsPath, err)
 		return 1
 	}
 	defer unix.Close(fd)
 	req, err := buildAttachRequest(st)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "oci-hook: build request: %v\n", err)
+		logErr("cid=%s build request: %v", st.ID, err)
 		return 1
 	}
 	resp, err := roundTrip(socket, req, fd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "oci-hook: request: %v\n", err)
+		logErr("cid=%s request: %v", st.ID, err)
 		return 1
 	}
 	if !resp.OK {
-		fmt.Fprintf(os.Stderr, "oci-hook: attach failed: %s\n", resp.Error)
+		logErr("cid=%s attach failed: %s", st.ID, resp.Error)
 		return 1
 	}
 	return 0

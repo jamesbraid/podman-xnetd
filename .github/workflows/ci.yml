@@ -10,8 +10,13 @@ jobs:
         with: { go-version: '1.25' }
       - run: go vet ./...
       - run: go test ./... -race -count=1
+  # GitHub-only: this boots a privileged container with the host cgroup tree.
+  # The forge's trusted runner has no docker socket by design, and the tier
+  # that does is the untrusted one, which is the wrong place to grant
+  # privileged containers for a routine pull-request check.
   harness:
     needs: unit
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

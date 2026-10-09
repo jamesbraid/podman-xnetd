@@ -7,7 +7,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	go.podman.io/common v0.67.1
 	golang.org/x/net v0.59.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (

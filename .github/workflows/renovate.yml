@@ -6,8 +6,8 @@
 # The server guard below is what keeps this from running on the GitHub mirror,
 # where RENOVATE_TOKEN does not exist.
 #
-# podman-general, not ubuntu-latest: that label is also advertised by the
-# RENOVATE_TOKEN is write-capable across every org.
+# podman-general, not ubuntu-latest: ubuntu-latest jobs get a docker
+# socket, and RENOVATE_TOKEN is write-capable across every org.
 ---
 name: renovate
 on:
